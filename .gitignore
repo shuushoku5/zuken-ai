@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+
+# アップロード画像・結果（個人データ）
+uploads/
+results/
+
+# APIキー（絶対にコミットしない）
+api-keys.txt
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

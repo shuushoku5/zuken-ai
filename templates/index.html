@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>機械図面 自動添削AI</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: "Segoe UI", "Yu Gothic UI", "Meiryo", sans-serif;
+            background: #f0f2f5;
+            color: #1a1a2e;
+            min-height: 100vh;
+        }
+
+        /* ヘッダー */
+        header {
+            background: #1a1a2e;
+            color: #fff;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        header h1 span { color: #4ecdc4; }
+        .header-sub {
+            font-size: 13px;
+            color: #8892a4;
+        }
+
+        /* メインレイアウト */
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* APIキー警告 */
+        .api-warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .api-warning code {
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 13px;
+        }
+
+        /* 2カラムレイアウト */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            align-items: start;
+        }
+        @media (max-width: 800px) {
+            .main-grid { grid-template-columns: 1fr; }
+        }
+
+        /* カード共通 */
+        .card {
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        .card-header {
+            padding: 14px 20px;
+            font-size: 15px;
+            font-weight: 600;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* アップロードエリア */
+        .upload-area {
+            padding: 20px;
+        }
+        .drop-zone {
+            border: 2px dashed #c8cdd5;
+            border-radius: 10px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #fafbfc;
+        }
+        .drop-zone:hover, .drop-zone.drag-over {
+            border-color: #4ecdc4;
+            background: #f0faf9;
+        }
+        .drop-zone-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+        .drop-zone-text {
+            font-size: 15px;
+            color: #555;
+            margin-bottom: 6px;
+        }
+        .drop-zone-sub {
+            font-size: 12px;
+            color: #999;
+        }
+        .file-input { display: none; }
+
+        /* 選択されたファイル表示 */
+        .file-preview {
+            margin-top: 16px;
+            display: none;
+        }
+        .file-preview.visible { display: block; }
+        .file-preview img {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+        }
+        .file-info {
+            margin-top: 8px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        /* コンテキスト入力 */
+        .context-input {
+            margin-top: 16px;
+        }
+        .context-input label {
+            font-size: 13px;
+            font-weight: 500;
+            color: #555;
+            display: block;
+            margin-bottom: 6px;
+        }
+        .context-input input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+        }
+        .context-input input:focus {
+            border-color: #4ecdc4;
+        }
+        .context-input .hint {
+            font-size: 11px;
+            color: #999;
+            margin-top: 4px;
+        }
+
+        /* 実行ボタン */
+        .submit-btn {
+            margin-top: 20px;
+            width: 100%;
+            padding: 14px;
+            background: #1a1a2e;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            letter-spacing: 0.5px;
+        }
+        .submit-btn:hover { background: #2d2d4a; }
+        .submit-btn:disabled {
+            background: #aaa;
+            cursor: not-allowed;
+        }
+
+        /* ローディング */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px 20px;
+        }
+        .loading.visible { display: block; }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 3px solid #e0e0e0;
+            border-top: 3px solid #4ecdc4;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text {
+            font-size: 14px;
+            color: #666;
+        }
+
+        /* 結果エリア */
+        .result-area {
+            padding: 20px;
+            display: none;
+        }
+        .result-area.visible { display: block; }
+
+        /* サマリーバー */
+        .summary-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .summary-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .badge-error { background: #fde8e8; color: #c0392b; }
+        .badge-warning { background: #fef5e7; color: #d68910; }
+        .badge-suggestion { background: #e8f4fd; color: #2980b9; }
+
+        .summary-text {
+            font-size: 14px;
+            color: #444;
+            margin-bottom: 16px;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            line-height: 1.6;
+        }
+
+        .drawing-summary {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 12px;
+        }
+
+        /* 指摘カード */
+        .finding-card {
+            border: 1px solid #e8e8e8;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            overflow: hidden;
+            transition: box-shadow 0.2s;
+        }
+        .finding-card:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .finding-header {
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .finding-header:hover { background: #fafafa; }
+
+        .severity-dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .severity-dot.error { background: #e74c3c; }
+        .severity-dot.warning { background: #f39c12; }
+        .severity-dot.suggestion { background: #3498db; }
+
+        .finding-title {
+            font-size: 14px;
+            font-weight: 600;
+            flex: 1;
+        }
+        .finding-id {
+            font-size: 11px;
+            color: #999;
+            font-family: monospace;
+        }
+        .confidence-tag {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #f0f0f0;
+            color: #777;
+        }
+        .confidence-tag.high { background: #e8f5e9; color: #388e3c; }
+        .confidence-tag.medium { background: #fff8e1; color: #f57f17; }
+        .confidence-tag.low { background: #fce4ec; color: #c62828; }
+
+        .finding-toggle {
+            font-size: 12px;
+            color: #999;
+            transition: transform 0.2s;
+        }
+        .finding-toggle.open { transform: rotate(180deg); }
+
+        .finding-body {
+            display: none;
+            padding: 0 16px 14px;
+            font-size: 13px;
+            line-height: 1.7;
+        }
+        .finding-body.open { display: block; }
+
+        .finding-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .finding-label {
+            font-weight: 600;
+            color: #555;
+            min-width: 56px;
+            flex-shrink: 0;
+        }
+        .finding-value { color: #333; }
+        .rule-tags {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            margin-top: 4px;
+        }
+        .rule-tag {
+            font-size: 11px;
+            padding: 2px 8px;
+            background: #e8eaf6;
+            color: #3949ab;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        /* メタ情報 */
+        .meta-info {
+            margin-top: 16px;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #888;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        /* 履歴タブ */
+        .tab-bar {
+            display: flex;
+            gap: 0;
+            margin-bottom: 20px;
+            background: #fff;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            background: #fff;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            color: #888;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            color: #1a1a2e;
+            border-bottom: 2px solid #4ecdc4;
+        }
+        .tab-btn:hover { background: #f8f8f8; }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* 履歴リスト */
+        .history-list { padding: 16px; }
+        .history-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .history-item:hover { background: #f8f9fa; }
+        .history-item:last-child { border-bottom: none; }
+        .history-thumb {
+            width: 48px; height: 48px;
+            border-radius: 6px;
+            object-fit: cover;
+            background: #eee;
+        }
+        .history-info { flex: 1; }
+        .history-name { font-size: 14px; font-weight: 500; }
+        .history-date { font-size: 12px; color: #999; }
+        .history-counts {
+            display: flex; gap: 8px;
+            font-size: 12px; font-weight: 600;
+        }
+        .history-empty {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+            font-size: 14px;
+        }
+
+        /* エラー表示 */
+        .error-msg {
+            background: #fde8e8;
+            color: #c0392b;
+            padding: 14px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 16px;
+            display: none;
+        }
+        .error-msg.visible { display: block; }
+    </style>
+</head>
+<body>
+    <header>
+        <div>
+            <h1>機械図面 <span>自動添削AI</span></h1>
+            <div class="header-sub">JIS/ISO製図ルール × 加工常識 × 検図実務</div>
+        </div>
+    </header>
+
+    <div class="container">
+
+        {% if not api_key_set %}
+        <div class="api-warning">
+            ⚠ <strong>ANTHROPIC_API_KEY</strong> が設定されていません。添削を実行するにはAPIキーが必要です。<br>
+            PowerShell: <code>$env:ANTHROPIC_API_KEY = "sk-ant-..."</code><br>
+            コマンドプロンプト: <code>set ANTHROPIC_API_KEY=sk-ant-...</code><br>
+            設定後、サーバーを再起動してください。
+        </div>
+        {% endif %}
+
+        <!-- タブ -->
+        <div class="tab-bar">
+            <button class="tab-btn active" onclick="switchTab('upload')">図面を添削</button>
+            <button class="tab-btn" onclick="switchTab('history')">添削履歴</button>
+        </div>
+
+        <!-- 添削タブ -->
+        <div id="tab-upload" class="tab-content active">
+            <div class="main-grid">
+                <!-- 左: アップロード -->
+                <div class="card">
+                    <div class="card-header">📄 図面をアップロード</div>
+                    <div class="upload-area">
+                        <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+                            <div class="drop-zone-icon">📐</div>
+                            <div class="drop-zone-text">ここに図面画像をドラッグ＆ドロップ</div>
+                            <div class="drop-zone-sub">またはクリックしてファイルを選択（PNG / JPG / WebP、20MB以下）</div>
+                        </div>
+                        <input type="file" id="fileInput" class="file-input" accept=".png,.jpg,.jpeg,.gif,.webp">
+
+                        <div class="file-preview" id="filePreview">
+                            <img id="previewImg" src="" alt="プレビュー">
+                            <div class="file-info" id="fileInfo"></div>
+                        </div>
+
+                        <div class="context-input">
+                            <label for="contextInput">追加情報（任意）</label>
+                            <input type="text" id="contextInput" placeholder="例: 材質A5052、量産図面、旋盤加工">
+                            <div class="hint">材質・加工方法・用途などを入力すると、より的確な指摘が得られます</div>
+                        </div>
+
+                        <button class="submit-btn" id="submitBtn" onclick="submitReview()" disabled>
+                            添削を実行
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 右: 結果 -->
+                <div class="card">
+                    <div class="card-header">📋 添削結果</div>
+
+                    <div class="loading" id="loading">
+                        <div class="spinner"></div>
+                        <div class="loading-text">図面を読み取り中...<br>（10〜30秒かかります）</div>
+                    </div>
+
+                    <div class="error-msg" id="errorMsg"></div>
+
+                    <div class="result-area" id="resultArea">
+                        <div class="drawing-summary" id="drawingSummary"></div>
+
+                        <div class="summary-bar" id="summaryBar"></div>
+                        <div class="summary-text" id="summaryText"></div>
+
+                        <div id="findingsList"></div>
+
+                        <div class="meta-info" id="metaInfo"></div>
+                    </div>
+
+                    <!-- 初期状態 -->
+                    <div id="emptyState" style="text-align:center; padding:60px 20px; color:#aaa; font-size:14px;">
+                        図面をアップロードすると、<br>ここに添削結果が表示されます
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 履歴タブ -->
+        <div id="tab-history" class="tab-content">
+            <div class="card">
+                <div class="card-header">📚 添削履歴</div>
+                <div class="history-list" id="historyList">
+                    <div class="history-empty">まだ添削履歴がありません</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- ファイル選択 & ドラッグ&ドロップ ---
+        let selectedFile = null;
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drag-over');
+        });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            if (e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                handleFile(fileInput.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            const allowed = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+            if (!allowed.includes(file.type)) {
+                alert('対応していない形式です。PNG / JPG / WebP を使ってください。');
+                return;
+            }
+            if (file.size > 20 * 1024 * 1024) {
+                alert('ファイルサイズが大きすぎます（上限20MB）');
+                return;
+            }
+
+            selectedFile = file;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('previewImg').src = e.target.result;
+                document.getElementById('filePreview').classList.add('visible');
+            };
+            reader.readAsDataURL(file);
+
+            const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+            document.getElementById('fileInfo').textContent = `${file.name} (${sizeMB} MB)`;
+            document.getElementById('submitBtn').disabled = false;
+        }
+
+        // --- 添削実行 ---
+        async function submitReview() {
+            if (!selectedFile) return;
+
+            const btn = document.getElementById('submitBtn');
+            const loading = document.getElementById('loading');
+            const resultArea = document.getElementById('resultArea');
+            const errorMsg = document.getElementById('errorMsg');
+            const emptyState = document.getElementById('emptyState');
+
+            btn.disabled = true;
+            btn.textContent = '添削中...';
+            loading.classList.add('visible');
+            resultArea.classList.remove('visible');
+            errorMsg.classList.remove('visible');
+            emptyState.style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('context', document.getElementById('contextInput').value);
+
+            try {
+                const resp = await fetch('/review', { method: 'POST', body: formData });
+                const data = await resp.json();
+
+                if (data.error) {
+                    errorMsg.textContent = data.error;
+                    errorMsg.classList.add('visible');
+                } else {
+                    renderResult(data);
+                }
+            } catch (err) {
+                errorMsg.textContent = '通信エラー: ' + err.message;
+                errorMsg.classList.add('visible');
+            } finally {
+                loading.classList.remove('visible');
+                btn.disabled = false;
+                btn.textContent = '添削を実行';
+            }
+        }
+
+        // --- 結果表示 ---
+        function renderResult(data) {
+            const resultArea = document.getElementById('resultArea');
+
+            // 図面概要
+            document.getElementById('drawingSummary').textContent =
+                data.drawing_summary || '';
+
+            // サマリーバッジ
+            const summary = data.summary || {};
+            const bar = document.getElementById('summaryBar');
+            bar.innerHTML = `
+                <div class="summary-badge badge-error">🔴 ${summary.error_count || 0}</div>
+                <div class="summary-badge badge-warning">🟡 ${summary.warning_count || 0}</div>
+                <div class="summary-badge badge-suggestion">🔵 ${summary.suggestion_count || 0}</div>
+            `;
+
+            document.getElementById('summaryText').textContent =
+                summary.overall_assessment || '';
+
+            // 指摘一覧
+            const list = document.getElementById('findingsList');
+            list.innerHTML = '';
+            const findings = data.findings || [];
+
+            if (findings.length === 0) {
+                list.innerHTML = '<div style="text-align:center;padding:20px;color:#4caf50;font-size:15px;">✅ 指摘なし</div>';
+            } else {
+                findings.forEach((f, i) => {
+                    const card = document.createElement('div');
+                    card.className = 'finding-card';
+
+                    const confClass = f.confidence ? ` ${f.confidence}` : '';
+                    const confTag = f.confidence
+                        ? `<span class="confidence-tag${confClass}">${f.confidence}</span>` : '';
+
+                    const ruleTags = (f.reference_rule_ids || [])
+                        .map(id => `<span class="rule-tag">${id}</span>`).join('');
+
+                    card.innerHTML = `
+                        <div class="finding-header" onclick="toggleFinding(${i})">
+                            <div class="severity-dot ${f.severity || ''}"></div>
+                            <span class="finding-title">${f.title || '(無題)'}</span>
+                            <span class="finding-id">${f.finding_id || ''}</span>
+                            ${confTag}
+                            <span class="finding-toggle" id="toggle-${i}">▼</span>
+                        </div>
+                        <div class="finding-body" id="body-${i}">
+                            ${f.location ? `<div class="finding-row"><span class="finding-label">箇所</span><span class="finding-value">${f.location}</span></div>` : ''}
+                            ${f.problem ? `<div class="finding-row"><span class="finding-label">問題</span><span class="finding-value">${f.problem}</span></div>` : ''}
+                            ${f.impact ? `<div class="finding-row"><span class="finding-label">影響</span><span class="finding-value">${f.impact}</span></div>` : ''}
+                            ${f.fix ? `<div class="finding-row"><span class="finding-label">修正案</span><span class="finding-value">${f.fix}</span></div>` : ''}
+                            ${ruleTags ? `<div class="finding-row"><span class="finding-label">根拠</span><div class="rule-tags">${ruleTags}</div></div>` : ''}
+                        </div>
+                    `;
+                    list.appendChild(card);
+                });
+
+                // 最初の指摘を開いておく
+                toggleFinding(0);
+            }
+
+            // メタ情報
+            const meta = data._meta || {};
+            document.getElementById('metaInfo').innerHTML = `
+                <span>⏱ ${meta.elapsed_seconds || '?'}秒</span>
+                <span>📊 入力${meta.input_tokens || '?'} / 出力${meta.output_tokens || '?'}トークン</span>
+                <span>💰 約${meta.cost_estimate_jpy || '?'}円</span>
+                <span>🤖 ${meta.model || '?'}</span>
+            `;
+
+            resultArea.classList.add('visible');
+        }
+
+        function toggleFinding(index) {
+            const body = document.getElementById(`body-${index}`);
+            const toggle = document.getElementById(`toggle-${index}`);
+            body.classList.toggle('open');
+            toggle.classList.toggle('open');
+        }
+
+        // --- タブ切り替え ---
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            event.target.classList.add('active');
+            document.getElementById(`tab-${tab}`).classList.add('active');
+
+            if (tab === 'history') loadHistory();
+        }
+
+        // --- 履歴 ---
+        async function loadHistory() {
+            try {
+                const resp = await fetch('/history');
+                const items = await resp.json();
+                const list = document.getElementById('historyList');
+
+                if (items.length === 0) {
+                    list.innerHTML = '<div class="history-empty">まだ添削履歴がありません</div>';
+                    return;
+                }
+
+                list.innerHTML = items.map(item => `
+                    <div class="history-item" onclick="loadResult('${item.file_id}')">
+                        ${item.image_url
+                            ? `<img class="history-thumb" src="${item.image_url}" alt="">`
+                            : '<div class="history-thumb"></div>'}
+                        <div class="history-info">
+                            <div class="history-name">${item.filename}</div>
+                            <div class="history-date">${formatDate(item.timestamp)}</div>
+                        </div>
+                        <div class="history-counts">
+                            <span style="color:#c0392b">🔴${item.error_count}</span>
+                            <span style="color:#d68910">🟡${item.warning_count}</span>
+                            <span style="color:#2980b9">🔵${item.suggestion_count}</span>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.error('履歴取得エラー:', err);
+            }
+        }
+
+        async function loadResult(fileId) {
+            try {
+                const resp = await fetch(`/result/${fileId}`);
+                const data = await resp.json();
+                switchTab('upload');
+                document.querySelectorAll('.tab-btn')[0].classList.add('active');
+                document.querySelectorAll('.tab-btn')[1].classList.remove('active');
+                document.getElementById('emptyState').style.display = 'none';
+                renderResult(data);
+            } catch (err) {
+                console.error('結果取得エラー:', err);
+            }
+        }
+
+        function formatDate(iso) {
+            if (!iso) return '';
+            const d = new Date(iso);
+            return `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+        }
+    </script>
+</body>
+</html>
