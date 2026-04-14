@@ -195,3 +195,7 @@ zuken-ai/
 ## ライセンス
 
 MIT License — 自由に使用・改変・再配布できます。
+## 関連記事
+
+- [機械図面をAIで自動添削する方法｜RAGを使った開発手順](https://livemyself.com/archives/5196)
+- [エンジニアがClaude APIで副業する方法｜実際に作ったツール3選と収益化のリアル](https://livemyself.com/)
